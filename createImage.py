@@ -1,67 +1,88 @@
+from unittest import case
+
 import cv2
 import numpy as np
 import os
 
+import ENUM
 
-def generiere_test_zustand(layout, datenbank_pfad="data/img/"):
-    scale_factor = 0.3  # Exakt derselbe Faktor wie in deiner Pipeline!
 
-    # 1. Basis-Hintergrund laden und direkt SKALIEREN
+def generiere_sps_state(sps_daten, generate_error=False):
+    """
+    Generiert ein zusammengebautes Testbild des Hochregallagers basierend auf den
+    SPS-Lagerdaten. Liest den aktuellen Belegungszustand aus, schneidet die Fächer
+    aus den entsprechenden Basisbildern zu und fügt sie in ein leeres Hintergrundbild ein.
+    """
+    # --- 1. INITIALISIERUNG & HINTERGRUND-VORBEREITUNG ---
+    scale_factor = 0.3  # Skalierungsfaktor zur Reduzierung der Bildgröße für performante Verarbeitung
+    datenbank_pfad = "data/img/"  # Basisverzeichnis für das Bildmaterial
+
+    # Basishintergrund (Leeres Regal ohne Container) laden
     original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "no_container.jpg"))
+
     if original_hintergrund is None:
         print("Fehler: 'no_container.jpg' nicht gefunden!")
         return None
 
-    # Skalierung auf die Zielgröße, zu der deine ROIs passen
-    width = int(original_hintergrund.shape[1] * scale_factor)
-    height = int(original_hintergrund.shape[0] * scale_factor)
-    hintergrund = cv2.resize(original_hintergrund, (width, height), interpolation=cv2.INTER_AREA)
+    # Ziel-Dimensionen berechnen und Hintergrund skalieren
+    original_breite = int(original_hintergrund.shape[1] * scale_factor)
+    original_hoehe = int(original_hintergrund.shape[0] * scale_factor)
+    hintergrund = cv2.resize(original_hintergrund, (original_breite, original_hoehe), interpolation=cv2.INTER_AREA)
 
-    rois = [
-        (150, 285, 210, 315), (150, 285, 535, 640), (150, 285, 850, 955),
-        (340, 475, 210, 315), (340, 475, 535, 640), (340, 475, 840, 945),
-        (530, 665, 210, 315), (530, 665, 535, 640), (530, 665, 830, 935)
-    ]
+    # Fokusbereiche (ROIs) der einzelnen Regalfächer aus den Enums laden
+    fokusbereiche = ENUM.FOKUSBEREICHE
 
-    gesamt_bilder_namen = {
-        "leer": "empty_container.jpg",
-        "rbw_ok": "ok_rbw.jpg",
-        "rbw_error": "error_rbw.jpg",
-        "bwr_ok": "ok_bwr.jpg",
-        "bwr_error": "error_bwr.jpg",
-        "wrb_ok": "ok_wrb.jpg",
-        "wrb_error": "error_wrb.jpg",
-    }
+    # SPS-Bestandsdaten extrahieren
+    stock_items = sps_daten["payload"]["stockItems"]
 
-    # Gesamtbilder laden und ebenfalls direkt SKALIEREN
-    gesamt_bilder = {}
-    for name, datei in gesamt_bilder_namen.items():
-        img = cv2.imread(os.path.join(datenbank_pfad, datei))
-        if img is not None:
-            # Jedes Quellbild auf die gleiche Größe bringen wie den Hintergrund
-            img_scaled = cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
-            gesamt_bilder[name] = img_scaled
+    # Debug-Ausgabe aller empfangenen SPS-Einträge
+    for item in stock_items:
+        print(item)
 
-    gewuenschte_zustaende = np.array(layout).flatten()
+    # Array zum gegenprüfen in der finalen auswertung. Enthält die Zustände, die das Kamerasystem tatsächlich hätte sehen sollen
+    tatsaechlicher_zustand = []
 
-    # 3. Das Bild Fach für Fach zusammenbauen
-    for idx, zustand_name in enumerate(gewuenschte_zustaende):
-        y_start, y_end, x_start, x_end = rois[idx]
-        h, w = y_end - y_start, x_end - x_start
+    # --- 2. VERARBEITUNG DER EINZELNEN REGALFÄCHER ---
+    for idx, fach in enumerate(stock_items):
+        # Prüfen, ob das Fach mit einem Werkstück belegt ist
+        tatsaechlicher_zustand.append({"Belegung": fach['workpiece']['type'], "Anomalien": []})
+        if fach["workpiece"]["type"] != "":
+            reihe = fach['location'][0]  # Zeilenbezeichnung (z. B. 'A', 'B', 'C')
+            farbe = fach['workpiece']['type']  # Werkstückfarbe
 
-        quell_bild = gesamt_bilder.get(zustand_name)
-        if quell_bild is None:
-            continue
+            # Basisbild-Referenz aus der Mapping-Tabelle ermitteln
+            quellbild = ENUM.BASISBILDER[reihe][farbe]
 
-        # Da quell_bild jetzt herunterskaliert ist, passen die Koordinaten exakt!
-        snippet = quell_bild[y_start:y_end, x_start:x_end].copy()
-        snippet_resized = cv2.resize(snippet, (w, h))
+            # Quellbild laden, falls ein Dateipfad-String übergeben wurde
+            if isinstance(quellbild, str):
+                quellbild = cv2.imread(os.path.join(datenbank_pfad, quellbild))
+            else:
+                quellbild = quellbild
 
-        # In das Hintergrundbild einsetzen
-        hintergrund[y_start:y_end, x_start:x_end] = snippet_resized
+            # Validierung, ob das Bild geladen werden konnte
+            if quellbild is None:
+                print(f"Fehler: Bild für Reihe {reihe}, Farbe {farbe} konnte nicht geladen werden!")
+                continue
 
-    # Ergebnis als current.jpg speichern
+            # Quellbild auf die globale Zielgröße skalieren
+            quellbild = cv2.resize(quellbild, (original_breite, original_hoehe), interpolation=cv2.INTER_AREA)
+            print(f"Fach {idx} ({fach['location']}): {farbe}")
+
+            # Koordinaten des Ziel-Fachs laden (Format: y_start, y_ende, x_start, x_ende)
+            y_start, y_ende, x_start, x_ende = fokusbereiche[idx]
+            hoehe, breite = y_ende - y_start, x_ende - x_start
+
+            # Relevantes Fach aus dem Quellbild ausschneiden und anpassen
+            quellbild_ausschnitt = quellbild[y_start:y_ende, x_start:x_ende].copy()
+            quellbild_ausschnitt_skaliert = cv2.resize(quellbild_ausschnitt, (breite, hoehe))
+
+            # Ausgeschnittenes Fach in das Hintergrundbild einbetten
+            hintergrund[y_start:y_ende, x_start:x_ende] = quellbild_ausschnitt_skaliert
+
+    # --- 3. SPEICHERUNG & AUSGABE ---
+    finales_bild = hintergrund
     os.makedirs(os.path.dirname("data/img/"), exist_ok=True)
     cv2.imwrite("data/img/current.jpg", hintergrund)
     print("-> Neues Testbild erfolgreich skaliert und als 'data/img/current.jpg' gespeichert.")
-    return hintergrund
+
+    return tatsaechlicher_zustand
