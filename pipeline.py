@@ -6,24 +6,26 @@ import ENUM
 # KONFIGURATION & SCHWELLENWERTE
 # =========================================================
 
-DEBUG = False
+DEBUG = True
 IMAGE_PATH = "data/img/current.jpg"
 
-# Mindestfläche in Pixeln
+# Mindestfläche in Pixeln für Farbobjekte (Inhalt)
 MIN_AREA = 300
 
 # Maximale zulässige Höhe der Farb-Box im Fach (relativ zur Gesamthöhe des Fachs ROI).
-# Bsp.: 0.55 bedeutet: Wenn die Farbkontur mehr als 55% der Gesamthöhe des Fachs
-# einnimmt, gilt das Werkstück als verkantet.
 MAX_HEIGHT_RATIO = 0.4
 
-# Alternativ kannst du auch einen festen Pixelwert nutzen (z.B. MAX_HEIGHT_PX = 80)
-# USE_PIXEL_HEIGHT = False
+# Schwellenwerte für den schwarzen Behälter
+MIN_CONTAINER_AREA = 3700
+MIN_CONTAINER_HEIGHT_PX = 50  # Ein echter Behälter ist z.B. mindestens 50px hoch
+
+# Schwellenwert für die Aussparung an der Unterseite des Behälters:
+MIN_GAP_RATIO = 0.06 # Mindestens 15% der Breite müssen im unteren Bereich "frei" sein
 
 # Morphologisches Stapelelement
 KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
-# HSV-Farbräume
+# HSV-Farbräume für den Inhalt
 COLOR_RANGES = {
     "BLUE": [
         (np.array([100, 110, 120]), np.array([130, 255, 255]))
@@ -42,6 +44,117 @@ COLOR_RANGES = {
 # HILFSFUNKTIONEN
 # =========================================================
 
+def get_black_container_mask(hsv_roi):
+    """
+    Erstellt eine Binärmaske für dunkle/schwarze Objekte (Behälter).
+    """
+    lower_black = np.array([0, 0, 65])
+    upper_black = np.array([180, 95, 140])
+
+    # lower_black = np.array([0, 0, 7])
+    # upper_black = np.array([180, 102, 140])
+
+    mask = cv2.inRange(hsv_roi, lower_black, upper_black)
+
+    # Rauschunterdrückung & Lücken im Plastik schließen
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    return mask
+
+
+def analyze_container_presence_and_orientation(roi, debug_canvas=None, global_offset=(0, 0)):
+    """
+    Prüft, ob ein schwarzer Behälter existiert und ob seine Boden-Aussparung
+    (Füße) sichtbar ist (= korrekte Ausrichtung).
+    """
+    if roi is None or roi.size == 0:
+        return {"vorhanden": False, "ausrichtung": "unbekannt", "gap_ratio": 0.0, "flaeche": 0, "hoehe": 0}
+
+    roi_h, roi_w = roi.shape[:2]
+
+    # 1. Bild aufbereiten & Schwarze Maske erstellen
+    blurred = cv2.GaussianBlur(roi, (5, 5), 0)
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+    mask = get_black_container_mask(hsv)
+
+    # Contours des schwarzen Objekts finden
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return {"vorhanden": False, "ausrichtung": "fehlt", "gap_ratio": 0.0, "flaeche": 0, "hoehe": 0}
+
+    # Größtes schwarzes Objekt im Fach suchen
+    largest_cnt = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(largest_cnt)
+    bx, by, bw, bh = cv2.boundingRect(largest_cnt)
+
+    # --- PRÜFUNG 1: PRESENCE (Vorhandensein) ---
+    if area < MIN_CONTAINER_AREA or bh < MIN_CONTAINER_HEIGHT_PX:
+        return {
+            "vorhanden": False,
+            "ausrichtung": "fehlt",
+            "gap_ratio": 0.0,
+            "flaeche": int(area),
+            "hoehe": bh
+        }
+
+    # --- PRÜFUNG 2: ORIENTATION (Aussparung an der Unterseite) ---
+    # Wir betrachten das unterste Viertel (25%) der Bounding Box des Behälters
+    bottom_zone_y_start = by + int(bh * 0.75)
+    bottom_zone_h = bh - int(bh * 0.75)
+
+    # Ausschnitt der Maske im unteren Bereich des Behälters
+    bottom_mask = mask[bottom_zone_y_start: by + bh, bx: bx + bw]
+
+    if bottom_mask.size == 0:
+        return {
+            "vorhanden": True,
+            "ausrichtung": "verdreht",
+            "gap_ratio": 0.0,
+            "flaeche": int(area),
+            "hoehe": bh
+        }
+
+    # Wir zählen spaltenweise (vertikal), wie viele schwarze Pixel im Bodenbereich liegen.
+    column_pixel_counts = np.sum(bottom_mask > 0, axis=0)
+
+    # Eine Spalte gilt als "Aussparung/Lücke", wenn weniger als 30% ihrer Höhe schwarz sind
+    empty_columns = np.sum(column_pixel_counts < (bottom_zone_h * 0.3))
+
+    # Relativer Anteil der Lücke bezogen auf die Gesamtbreite des Behälters
+    gap_ratio = empty_columns / float(bw)
+
+    # Entscheidung: Ist die Aussparung breit genug?
+    is_correctly_oriented = gap_ratio >= MIN_GAP_RATIO
+    ausrichtung = "ok" if is_correctly_oriented else "verdreht"
+
+    # -----------------------------------------------------
+    # DEBUG EINZEICHNUNG BEHÄLTER
+    # -----------------------------------------------------
+    if DEBUG and debug_canvas is not None:
+        gx, gy = global_offset
+
+        # Behälter-Bounding-Box (Blau)
+        cv2.rectangle(debug_canvas, (gx + bx, gy + by), (gx + bx + bw, gy + by + bh), (255, 100, 0), 2)
+
+        # Untere Messzone für die Aussparung (Grün bei OK, Rot bei Fehler)
+        zone_color = (0, 255, 0) if is_correctly_oriented else (0, 0, 255)
+        cv2.rectangle(debug_canvas,
+                      (gx + bx, gy + bottom_zone_y_start),
+                      (gx + bx + bw, gy + by + bh),
+                      zone_color, 1)
+
+    return {
+        "vorhanden": True,
+        "ausrichtung": ausrichtung,
+        "gap_ratio": round(gap_ratio, 2),
+        "flaeche": int(area),
+        "hoehe": bh
+    }
+
+
 def get_clean_color_mask(hsv, color_name):
     """Erstellt eine bereinigte Binärmaske für die angeforderte Farbe."""
     ranges = COLOR_RANGES[color_name]
@@ -58,6 +171,9 @@ def get_clean_color_mask(hsv, color_name):
 
 
 def analyze_container(roi, container_id, debug_canvas=None, global_offset=(0, 0)):
+    """
+    Analysiert den Inhalt des Behälters (Farbe, Fläche, Verkantung/Höhe).
+    """
     if roi is None or roi.size == 0:
         return {"farbe": "", "lage": "ok", "flaeche": 0, "box_hoehe": 0}, None
 
@@ -93,7 +209,7 @@ def analyze_container(roi, container_id, debug_canvas=None, global_offset=(0, 0)
                 best_area = area
                 best_color = color_name
 
-    # Fach gilt als leer, wenn im inneren Bereich keine Farbe liegt
+    # Inhalt gilt als leer, wenn im inneren Bereich keine Farbe liegt
     if not best_color or best_area < MIN_AREA:
         return {"farbe": "", "lage": "ok", "flaeche": 0, "box_hoehe": 0}, color_masks
 
@@ -104,35 +220,30 @@ def analyze_container(roi, container_id, debug_canvas=None, global_offset=(0, 0)
     blurred_full = cv2.GaussianBlur(roi, (5, 5), 0)
     hsv_full = cv2.cvtColor(blurred_full, cv2.COLOR_BGR2HSV)
 
-    # Erzeuge Maske im GANZEN Fach, aber NUR für die gefundene Farbe
     full_mask = get_clean_color_mask(hsv_full, best_color)
     contours_full, _ = cv2.findContours(full_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     box_h = 0
     is_jammed = False
-    full_box_coords = None  # (x, y, w, h) im ROI
+    full_box_coords = None
 
     if contours_full and best_color != "":
-        # Nimm die größte zusammenhängende Farbfläche im gesamten Fach
         largest_cnt = max(contours_full, key=cv2.contourArea)
 
         if cv2.contourArea(largest_cnt) >= MIN_AREA:
-            # Aufrechte Bounding Box berechnen
             bx, by, bw, bh = cv2.boundingRect(largest_cnt)
             box_h = bh
             full_box_coords = (bx, by, bw, bh)
 
-            # Relatives Verhältnis der Box-Höhe zur Fach-Höhe berechnen
             height_ratio = box_h / float(roi_h)
 
-            # Prüfen, ob die Höhe den Schwellenwert überschreitet
             if height_ratio > MAX_HEIGHT_RATIO:
                 is_jammed = True
 
     lage = "verkantet" if is_jammed else "ok"
 
     # -----------------------------------------------------
-    # DEBUG EINZEICHNUNG
+    # DEBUG EINZEICHNUNG INHALT
     # -----------------------------------------------------
     if DEBUG and debug_canvas is not None:
         gx, gy = global_offset
@@ -143,7 +254,7 @@ def analyze_container(roi, container_id, debug_canvas=None, global_offset=(0, 0)
         # 2. Bounding Box um die Farbstruktur im vollen ROI
         if full_box_coords is not None:
             bx, by, bw, bh = full_box_coords
-            rect_color = (0, 0, 255) if is_jammed else (255, 200, 0)  # Rot bei Verkantung, sonst hellblau
+            rect_color = (0, 0, 255) if is_jammed else (255, 200, 0)
             cv2.rectangle(debug_canvas, (gx + bx, gy + by), (gx + bx + bw, gy + by + bh), rect_color, 2)
 
     return {
@@ -176,14 +287,30 @@ def main(soll_zustand):
     for idx, (y_start, y_ende, x_start, x_ende) in enumerate(fokusbereiche):
         roi = image[y_start:y_ende, x_start:x_ende]
 
-        result, masks = analyze_container(roi, idx, debug_canvas, global_offset=(x_start, y_start))
+        # 1. Analyse des Behälters (Präsenz & Ausrichtung)
+        container_info = analyze_container_presence_and_orientation(
+            roi, debug_canvas, global_offset=(x_start, y_start)
+        )
 
-        farbe = result["farbe"]
-        lage = result["lage"]
-        box_hoehe = result["box_hoehe"]
+        # 2. Analyse des Inhalts (Farbe, Fläche, Verkantung)
+        content_info, masks = analyze_container(
+            roi, idx, debug_canvas, global_offset=(x_start, y_start)
+        )
+
+        farbe = content_info["farbe"]
+        lage = content_info["lage"]
+        box_hoehe = content_info["box_hoehe"]
 
         anomalien = []
 
+        # --- ANOMALIEN-PRÜFUNG ---
+        # A) Behälter-Fehler
+        if not container_info["vorhanden"]:
+            anomalien.append("Behaelter fehlt")
+        elif container_info["ausrichtung"] == "verdreht":
+            anomalien.append("Behaelter verdreht")
+
+        # B) Inhalts-Fehler
         soll_farbe = soll_zustand[idx]["Belegung"]
         if farbe != soll_farbe:
             anomalien.append("Farbe")
@@ -191,18 +318,26 @@ def main(soll_zustand):
         if lage == "verkantet":
             anomalien.append("Verkantung")
 
+        # --- STATISTIKEN ---
         statistics.append({
             "Belegung": farbe,
+            "Behaelter_Vorhanden": container_info["vorhanden"],
+            "Behaelter_Ausrichtung": container_info["ausrichtung"],
+            "Behaelter_Flaeche": container_info["flaeche"],
+            "Behaelter_Hoehe": container_info["hoehe"],
             "Anomalien": anomalien
         })
 
+        # --- DEBUG OVERLAY ---
         if DEBUG and debug_canvas is not None:
-            # Rahmen um das gesamte Fach (Grün = OK, Rot = Anomalie)
+            # Fach-Rahmen (Grün = OK, Rot = Anomalie)
             box_color = (0, 255, 0) if len(anomalien) == 0 else (0, 0, 255)
             cv2.rectangle(debug_canvas, (x_start, y_start), (x_ende, y_ende), box_color, 2)
 
             label = f"F{idx}: {farbe if farbe else 'EMPTY'} (Soll:{soll_farbe})"
-            sub_label = f"Hoehe: {box_hoehe}px"
+
+            # NEU: Zeigt Fläche (A: ...px) und Höhe (H: ...px) des Behälters an
+            sub_label = f"A:{container_info['flaeche']}px | H:{container_info['hoehe']}px | Gap:{int(container_info['gap_ratio'] * 100)}%"
 
             cv2.putText(debug_canvas, label, (x_start + 5, y_start + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
                         (255, 255, 255), 1)

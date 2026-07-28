@@ -18,7 +18,7 @@ def generiere_sps_state(sps_daten, generate_error=False):
     datenbank_pfad = "data/img/"  # Basisverzeichnis für das Bildmaterial
 
     # Basishintergrund (Leeres Regal ohne Container) laden
-    original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "no_container.jpg"))
+    original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "empty_container.jpg"))
 
     if original_hintergrund is None:
         print("Fehler: 'no_container.jpg' nicht gefunden!")

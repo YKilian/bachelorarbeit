@@ -1,75 +1,85 @@
 import cv2
 import numpy as np
 
-# --- Schritt 0: Bild laden und skalieren ---
-image = cv2.imread("data/img/current.jpg")
+# --- 1. Bild laden und skalieren ---
+IMAGE_PATH = "data/img/current.jpg"
+image = cv2.imread(IMAGE_PATH)
+
 if image is None:
-    print("Fehler: Bild konnte nicht geladen werden.")
+    print(f"Fehler: Bild '{IMAGE_PATH}' konnte nicht geladen werden.")
     exit()
 
-scale_factor = 0.3
-width = int(image.shape[1] * scale_factor)
-height = int(image.shape[0] * scale_factor)
-image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+SCALE_FACTOR = 0.3
+width = int(image.shape[1] * SCALE_FACTOR)
+height = int(image.shape[0] * SCALE_FACTOR)
+resized = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
 
-# --- Schritt 1: ROIs manuell definieren ---
-rois = [
-    (180, 285, 210, 315),    # Container 1
-    (180, 285, 535, 640),   # Container 2
-    (180, 285, 850, 955),   # Container 3
-    (370, 475, 210, 315),   # Container 4
-    (370, 475, 535, 640),   # Container 5
-    (370, 475, 840, 945),   # Container 6
-    (560, 665, 210, 315),   # Container 7
-    (560, 665, 535, 640),   # Container 8
-    (560, 665, 830, 935)    # Container 9
-]
+# In HSV konvertieren
+hsv = cv2.cvtColor(resized, cv2.COLOR_BGR2HSV)
 
-# --- Schritt 2: HSV-Werte der Steine extrahieren ---
-for idx, (y_start, y_end, x_start, x_end) in enumerate(rois):
-    print(f"\n--- Container {idx + 1} ---")
+# Callback-Funktion für die Regler (wird bei jeder Änderung aufgerufen)
+def nothing(x):
+    pass
 
-    # ROI extrahieren
-    roi = image[y_start:y_end, x_start:x_end]
+# --- 2. Fenster und Trackbars erstellen ---
+cv2.namedWindow("HSV Einstellungen", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("HSV Einstellungen", 400, 300)
 
-    # Hintergrund ausschließen: Nur inneren Bereich analysieren
-    top_margin = 0.1  # 10% Rand oben ausschließen
-    bottom_margin = 0.5  # 10% Rand unten ausschließen
-    inner_y_start = int((y_end - y_start) * top_margin)
-    inner_y_end = int((y_end - y_start) * (1 - bottom_margin))
-    inner_roi = roi[inner_y_start:inner_y_end, :]  # Von inner_y_start bis
+# Trackbars für LOWER Vektor
+cv2.createTrackbar("Lower H", "HSV Einstellungen", 0, 180, nothing)
+cv2.createTrackbar("Lower S", "HSV Einstellungen", 0, 255, nothing)
+cv2.createTrackbar("Lower V", "HSV Einstellungen", 30, 255, nothing)
 
-    inner_roi_hsv = cv2.cvtColor(inner_roi, cv2.COLOR_BGR2HSV)
+# Trackbars für UPPER Vektor
+cv2.createTrackbar("Upper H", "HSV Einstellungen", 180, 180, nothing)
+cv2.createTrackbar("Upper S", "HSV Einstellungen", 50, 255, nothing)
+cv2.createTrackbar("Upper V", "HSV Einstellungen", 150, 255, nothing)
 
-    # HSV-Kanäle trennen
-    h, s, v = cv2.split(inner_roi_hsv)
+print("=" * 60)
+print(" HSV SCHIEBEREGLER - TOOL")
+print("=" * 60)
+print("Stelle die Regler im Fenster 'HSV Einstellungen' ein.")
+print("Drücke 'q' oder 'ESC' im Bildfenster, um zu beenden.")
+print("=" * 60)
 
-    # Min/Max-Werte für jeden Kanal
-    print(f"Hue: Min={h.min()}, Max={h.max()}, Mittelwert={h.mean():.1f}")
-    print(f"Saturation: Min={s.min()}, Max={s.max()}, Mittelwert={s.mean():.1f}")
-    print(f"Value: Min={v.min()}, Max={v.max()}, Mittelwert={v.mean():.1f}")
+while True:
+    # 1. Aktuelle Werte der Schieberegler auslesen
+    l_h = cv2.getTrackbarPos("Lower H", "HSV Einstellungen")
+    l_s = cv2.getTrackbarPos("Lower S", "HSV Einstellungen")
+    l_v = cv2.getTrackbarPos("Lower V", "HSV Einstellungen")
 
-    # Histogramm für jeden Kanal erstellen
-    hist_h = cv2.calcHist([h], [0], None, [256], [0, 256])
-    hist_s = cv2.calcHist([s], [0], None, [256], [0, 256])
-    hist_v = cv2.calcHist([v], [0], None, [256], [0, 256])
+    u_h = cv2.getTrackbarPos("Upper H", "HSV Einstellungen")
+    u_s = cv2.getTrackbarPos("Upper S", "HSV Einstellungen")
+    u_v = cv2.getTrackbarPos("Upper V", "HSV Einstellungen")
 
-    # Histogramm visualisieren (einfach als Bild)
-    hist_img = np.zeros((300, 256, 3), dtype=np.uint8)
-    for i in range(256):
-        # Hue (Blau)
-        cv2.line(hist_img, (i, 100), (i, 100 - int(hist_h[i][0] * 0.01)), (255, 0, 0), 1)
-        # Saturation (Grün)
-        cv2.line(hist_img, (i, 200), (i, 200 - int(hist_s[i][0] * 0.01)), (0, 255, 0), 1)
-        # Value (Rot)
-        cv2.line(hist_img, (i, 300), (i, 300 - int(hist_v[i][0] * 0.01)), (0, 0, 255), 1)
+    lower = np.array([l_h, l_s, l_v])
+    upper = np.array([u_h, u_s, u_v])
 
-    # cv2.imshow(f"Histogramm HSV für Container {idx + 1}", hist_img)
-    # cv2.waitKey(0)
+    # 2. Maske berechnen
+    mask = cv2.inRange(hsv, lower, upper)
 
-    # ROI und inneren Bereich anzeigen
-    # cv2.imshow(f"ROI Container {idx + 1}", roi)
-    # cv2.imshow(f"Innerer Bereich Container {idx + 1}", inner_roi)
-    # cv2.waitKey(0)
+    # 3. Live-Text auf dem Originalbild einblenden
+    text_canvas = resized.copy()
+    cv2.putText(text_canvas, f"LOWER: {lower.tolist()}", (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    cv2.putText(text_canvas, f"UPPER: {upper.tolist()}", (10, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+    # 4. Fenster anzeigen
+    cv2.imshow("Original mit Werten", text_canvas)
+    cv2.imshow("HSV Maske Live", mask)
+
+    # Beenden mit Tastendruck 'q' oder ESC (27)
+    key = cv2.waitKey(30) & 0xFF
+    if key == ord('q') or key == 27:
+        break
+
+# --- Finaler Code-Export ---
+print("\n" + "=" * 60)
+print(" DEINE FINALEN WERTE FÜR DEN CODE:")
+print("=" * 60)
+print(f"lower_black = np.array([{l_h}, {l_s}, {l_v}])")
+print(f"upper_black = np.array([{u_h}, {u_s}, {u_v}])")
+print("=" * 60)
 
 cv2.destroyAllWindows()

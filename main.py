@@ -71,7 +71,7 @@ def drucke_metriken_bericht(metriken: dict, moegliche_anomalien: list):
 
 
 def main():
-    POSSIBLE_STATES = ["RED", "BLUE", "WHITE", ""]
+    POSSIBLE_STATES = [""]
     MOEGLICHE_ANOMALIEN = ["Farbe", "Verkantung", "Container_Rotiert", "Container_Fehlt"]
 
     # 1. Testdaten generieren
@@ -147,7 +147,7 @@ def sum_nested_dicts(*dicts):
 
 if __name__ == "__main__":
     overall_metriken = {}
-    for i in range(20):
+    for i in range(1):
         metriken = main()
         overall_metriken = sum_nested_dicts(overall_metriken, metriken)
 
