@@ -6,7 +6,7 @@ import ENUM
 # KONFIGURATION & SCHWELLENWERTE
 # =========================================================
 
-DEBUG = True
+DEBUG = False
 IMAGE_PATH = "data/img/current.jpg"
 
 # Mindestfläche in Pixeln für Farbobjekte (Inhalt)
@@ -283,6 +283,7 @@ def main(soll_zustand):
                       ["BLUE", "RED", "WHITE"]} if DEBUG else {}
 
     statistics = []
+    results = []
 
     for idx, (y_start, y_ende, x_start, x_ende) in enumerate(fokusbereiche):
         roi = image[y_start:y_ende, x_start:x_ende]
@@ -306,13 +307,14 @@ def main(soll_zustand):
         # --- ANOMALIEN-PRÜFUNG ---
         # A) Behälter-Fehler
         if not container_info["vorhanden"]:
-            anomalien.append("Behaelter fehlt")
+            farbe = ""
+            anomalien.append("Behälter_Fehlt")
         elif container_info["ausrichtung"] == "verdreht":
-            anomalien.append("Behaelter verdreht")
+            anomalien.append("Behälter_Rotiert")
 
         # B) Inhalts-Fehler
         soll_farbe = soll_zustand[idx]["Belegung"]
-        if farbe != soll_farbe:
+        if farbe != soll_farbe and container_info["vorhanden"]:
             anomalien.append("Farbe")
 
         if lage == "verkantet":
@@ -325,6 +327,11 @@ def main(soll_zustand):
             "Behaelter_Ausrichtung": container_info["ausrichtung"],
             "Behaelter_Flaeche": container_info["flaeche"],
             "Behaelter_Hoehe": container_info["hoehe"],
+            "Anomalien": anomalien
+        })
+
+        results.append({
+            "Belegung": farbe,
             "Anomalien": anomalien
         })
 
@@ -366,4 +373,4 @@ def main(soll_zustand):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    return statistics
+    return results

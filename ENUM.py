@@ -26,3 +26,9 @@ BASISBILDER = {
         "WHITE": "ok_rbw.jpg"
     }
 }
+
+# === FÄCHER ===
+# Zuordnen von möglichen Belegungen, Anomalien und deren Eintrittswahrscheinlichkeit für jedes Fach
+BELEGUNGEN = ["RED", "BLUE", "WHITE", ""]
+ANOMALIEN = ["Farbe", "Verkantung", "Behälter_Rotiert", "Behälter_Fehlt"]
+GEWICHTUNG_ANOMALIEN = [0.6, 0.2, 0.1, 0.1]

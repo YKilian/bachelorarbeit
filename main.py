@@ -1,5 +1,7 @@
 import datetime
 import random
+
+import ENUM
 import createImage
 import pipeline
 
@@ -70,20 +72,21 @@ def drucke_metriken_bericht(metriken: dict, moegliche_anomalien: list):
     print("=" * 70 + "\n")
 
 
-def main():
-    POSSIBLE_STATES = [""]
-    MOEGLICHE_ANOMALIEN = ["Farbe", "Verkantung", "Container_Rotiert", "Container_Fehlt"]
+def main(fehler_rate=0.0):
+    belegungen = ENUM.BELEGUNGEN
+    anomalien = ENUM.ANOMALIEN
 
     # 1. Testdaten generieren
-    sps_daten = erstelle_zufaellige_sps_daten(POSSIBLE_STATES)
+    sps_daten = erstelle_zufaellige_sps_daten(belegungen)
     soll_zustand = uebersetze_sps_daten(sps_daten)
 
     # 2. Testbild rendern & Pipeline ausführen
     # createImage.generiere_sps_state gibt das OpenCV-Bild zurück und speichert current.jpg
-    testbild = createImage.generiere_sps_state(sps_daten, generate_error=False)
+    ist_fehler_erzeugen = random.randint(0, 101) < (fehler_rate * 100)
+    tatsaechlicher_zustand = createImage.generiere_sps_state(sps_daten, generiere_fehler=ist_fehler_erzeugen)
 
-    # Physischer Ist-Zustand (Entspricht bei generierten Bildern zunächst dem Soll-Zustand)
-    physischer_zustand = soll_zustand
+    # Physischer Ist-Zustand
+    physischer_zustand = tatsaechlicher_zustand
 
     # Pipeline-Analyse aufrufen
     gesehener_zustand = pipeline.main(soll_zustand)
@@ -96,7 +99,7 @@ def main():
 
     # Metriken-Container initialisieren
     metriken = {
-        kategorie: {anomalie: 0 for anomalie in MOEGLICHE_ANOMALIEN}
+        kategorie: {anomalie: 0 for anomalie in anomalien}
         for kategorie in ["RP", "FP", "RN", "FN"]
     }
 
@@ -115,7 +118,7 @@ def main():
         print(header_fmt.format(f"Fach {idx}", ist_str, gesehen_str, soll_str, match_status))
 
         # Konfusionsmatrix für alle Anomaliearten befüllen
-        for anomalie in MOEGLICHE_ANOMALIEN:
+        for anomalie in anomalien:
             in_ist = anomalie in ist['Anomalien']
             in_gesehen = anomalie in gesehen['Anomalien']
 
@@ -129,7 +132,7 @@ def main():
                 metriken["RN"][anomalie] += 1  # Real-Negativ (True Negative)
 
     # 5. Abschlussbericht drucken
-    drucke_metriken_bericht(metriken, MOEGLICHE_ANOMALIEN)
+    drucke_metriken_bericht(metriken, anomalien)
 
     return metriken
 
@@ -147,8 +150,8 @@ def sum_nested_dicts(*dicts):
 
 if __name__ == "__main__":
     overall_metriken = {}
-    for i in range(1):
-        metriken = main()
+    for i in range(20):
+        metriken = main(0.54)
         overall_metriken = sum_nested_dicts(overall_metriken, metriken)
 
     print(overall_metriken)
