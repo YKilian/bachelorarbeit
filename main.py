@@ -151,7 +151,7 @@ def sum_nested_dicts(*dicts):
 if __name__ == "__main__":
     overall_metriken = {}
     for i in range(20):
-        metriken = main(0.54)
+        metriken = main(fehler_rate=.54)
         overall_metriken = sum_nested_dicts(overall_metriken, metriken)
 
     print(overall_metriken)
