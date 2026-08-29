@@ -1,3 +1,6 @@
+import cv2
+import numpy as np
+
 # === FOKUSBEREICHE ===
 # Bildkoordinaten und Skalierung der jeweiligen Fächer im Bild
 # (y_start, y_end, x_start, x_end)
@@ -32,3 +35,38 @@ BASISBILDER = {
 BELEGUNGEN = ["RED", "BLUE", "WHITE", ""]
 ANOMALIEN = ["Farbe", "Verkantung", "Behälter_Rotiert", "Behälter_Fehlt"]
 GEWICHTUNG_ANOMALIEN = [0.6, 0.2, 0.1, 0.1]
+
+IMAGE_PATH = "data/img/current.jpg"
+
+# Mindestfläche in Pixeln für Farbobjekte (Inhalt)
+MIN_AREA = 300
+
+# Maximale zulässige Höhe der Farb-Box im Fach (relativ zur Gesamthöhe des Fachs ROI).
+MAX_HEIGHT_RATIO = 0.4
+
+# Schwellenwerte für den schwarzen Behälter
+MIN_CONTAINER_AREA = 3700
+MIN_CONTAINER_HEIGHT_PX = 50  # Ein echter Behälter ist z.B. mindestens 50px hoch
+
+# Schwellenwert für die Aussparung an der Unterseite des Behälters:
+MIN_GAP_RATIO = 0.06 # Mindestens 15% der Breite müssen im unteren Bereich "frei" sein
+
+# Morphologisches Stapelelement
+KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+
+# HSV-Farbräume für den Inhalt
+COLOR_RANGES = {
+    "BLUE": [
+        (np.array([100, 110, 120]), np.array([130, 255, 255]))
+    ],
+    "RED": [
+        (np.array([0, 110, 120]), np.array([8, 255, 255])),
+        (np.array([165, 110, 120]), np.array([179, 255, 255]))
+    ],
+    "WHITE": [
+        (np.array([0, 0, 210]), np.array([180, 40, 255]))
+    ],
+    "BLACK": [
+        (np.array([0, 0, 65]), np.array([180, 95, 140]))
+    ]
+}

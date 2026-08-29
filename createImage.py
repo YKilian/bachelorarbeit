@@ -1,5 +1,4 @@
 import random
-from unittest import case
 
 import cv2
 import numpy as np
@@ -18,22 +17,22 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
     scale_factor = 0.3  # Skalierungsfaktor zur Reduzierung der Bildgröße für performante Verarbeitung
     datenbank_pfad = "data/img/"  # Basisverzeichnis für das Bildmaterial
 
-    # Basishintergrund (Leeres Regal ohne Container) laden
+    # Basishintergrund (Regal mit leeren Containern) laden
     original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "empty_container.jpg"))
+
+    if original_hintergrund is None:
+        print("Fehler: 'empty_container.jpg' nicht gefunden!")
+        return None
 
     # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
     gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN
-
-    if original_hintergrund is None:
-        print("Fehler: 'no_container.jpg' nicht gefunden!")
-        return None
 
     # Ziel-Dimensionen berechnen und Hintergrund skalieren
     original_breite = int(original_hintergrund.shape[1] * scale_factor)
     original_hoehe = int(original_hintergrund.shape[0] * scale_factor)
     hintergrund = cv2.resize(original_hintergrund, (original_breite, original_hoehe), interpolation=cv2.INTER_AREA)
 
-    # Fokusbereiche (ROIs) der einzelnen Regalfächer aus den Enums laden
+    # Fokusbereiche der einzelnen Regalfächer aus den Enums laden
     fokusbereiche = ENUM.FOKUSBEREICHE
 
     # SPS-Bestandsdaten extrahieren
@@ -137,7 +136,7 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
     # --- 3. SPEICHERUNG & AUSGABE ---
     finales_bild = hintergrund
     os.makedirs(os.path.dirname("data/img/"), exist_ok=True)
-    cv2.imwrite("data/img/current.jpg", hintergrund)
-    print("-> Neues Testbild erfolgreich skaliert und als 'data/img/current.jpg' gespeichert.")
+    cv2.imwrite(ENUM.IMAGE_PATH, hintergrund)
+    print(f"-> Neues Testbild erfolgreich skaliert und als {ENUM.IMAGE_PATH} gespeichert.")
 
     return tatsaechlicher_zustand

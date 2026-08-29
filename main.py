@@ -7,7 +7,10 @@ import pipeline
 
 
 def uebersetze_sps_daten(sps_daten: dict) -> list:
-    """Übersetzt die SPS-Payload in das interne Soll-Zustandsformat."""
+    """Übersetzt die SPS-Payload in das interne Soll-Zustandsformat.
+    :param sps_daten: SPS-Daten-Struktur
+    :returns: Soll-Zustandsformat
+    """
     zustand = []
     stock_items = sps_daten["payload"]["stockItems"]
     for stock_item in stock_items:
@@ -18,8 +21,11 @@ def uebersetze_sps_daten(sps_daten: dict) -> list:
     return zustand
 
 
-def erstelle_zufaellige_sps_daten(possible_states: list) -> dict:
-    """Generiert ein dynamisches SPS-Daten-Dictionary mit zufälliger Belegung."""
+def erstelle_zufaellige_sps_daten() -> dict:
+    """Generiert eine zufällige SPS-Daten-Struktur.
+    :returns: SPS-Daten-Struktur
+    """
+    possible_states = ENUM.BELEGUNGEN
     now = datetime.datetime.now()
     locations = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"]
 
@@ -41,13 +47,19 @@ def erstelle_zufaellige_sps_daten(possible_states: list) -> dict:
 
 
 def drucke_metriken_bericht(metriken: dict, moegliche_anomalien: list):
-    """Erstellt einen übersichtlichen wissenschaftlichen Evaluierungsbericht."""
+    """Erstellt einen übersichtlichen Evaluierungsbericht.
+    :param metriken: Metriken-Daten aus dem aktuellen Durchlauf
+    :param moegliche_anomalien: Liste der generell möglichen Anomalien
+    """
+
+    # Kopfzeile für RP FP RN FN
     print("\n" + "=" * 70)
     print("      EVALUIERUNGSBERICHT DER ERKENNUNGS-PIPELINE")
     print("=" * 70)
     print(f"{'Anomalie':<20} | {'RP':<8} | {'FP':<8} | {'RN':<8} | {'FN':<8}")
     print("-" * 70)
 
+    # Zusammenfassung
     for anomalie in moegliche_anomalien:
         rp = metriken["RP"][anomalie]
         fp = metriken["FP"][anomalie]
@@ -55,10 +67,12 @@ def drucke_metriken_bericht(metriken: dict, moegliche_anomalien: list):
         fn = metriken["FN"][anomalie]
         print(f"{anomalie:<20} | {rp:<8} | {fp:<8} | {rn:<8} | {fn:<8}")
 
+    # Kopfzeile für Precision Recall F1-Score
     print("-" * 70)
     print(f"{'Anomalie':<20} | {'Precision':<10} | {'Recall':<10} | {'F1-Score':<10}")
     print("-" * 70)
 
+    # Zusammenfassung
     for anomalie in moegliche_anomalien:
         rp = metriken["RP"][anomalie]
         fp = metriken["FP"][anomalie]
@@ -73,16 +87,18 @@ def drucke_metriken_bericht(metriken: dict, moegliche_anomalien: list):
 
 
 def main(fehler_rate=0.0):
-    belegungen = ENUM.BELEGUNGEN
+    """Hauptprogramm.
+    :param fehler_rate: Wert für Fehlerwahrscheinlichkeit
+    :return: Metriken aus dem aktuellen Durchlauf
+    """
     anomalien = ENUM.ANOMALIEN
 
     # 1. Testdaten generieren
-    sps_daten = erstelle_zufaellige_sps_daten(belegungen)
+    sps_daten = erstelle_zufaellige_sps_daten()
     soll_zustand = uebersetze_sps_daten(sps_daten)
 
-    # 2. Testbild rendern & Pipeline ausführen
-    # createImage.generiere_sps_state gibt das OpenCV-Bild zurück und speichert current.jpg
-    ist_fehler_erzeugen = random.randint(0, 101) < (fehler_rate * 100)
+    # 2. Testbild erstellen & Pipeline ausführen
+    ist_fehler_erzeugen = random.randint(0, 101) < (fehler_rate * 100) # Boolean Wert für Fehlererzeugung
     tatsaechlicher_zustand = createImage.generiere_sps_state(sps_daten, generiere_fehler=ist_fehler_erzeugen)
 
     # Physischer Ist-Zustand
@@ -109,7 +125,7 @@ def main(fehler_rate=0.0):
         gesehen = gesehener_zustand[idx]
         soll = soll_zustand[idx]
 
-        match_status = "✅ OK" if ist == gesehen else "❌ FALSCH"
+        match_status = "OK" if ist == gesehen else "FALSCH"
 
         ist_str = f"{ist['Belegung']} {ist['Anomalien']}"
         gesehen_str = f"{gesehen['Belegung']} {gesehen['Anomalien']}"
@@ -123,13 +139,13 @@ def main(fehler_rate=0.0):
             in_gesehen = anomalie in gesehen['Anomalien']
 
             if in_ist and in_gesehen:
-                metriken["RP"][anomalie] += 1  # Real-Positiv (True Positive)
+                metriken["RP"][anomalie] += 1  # Richtig-Positiv (True Positive)
             elif in_ist and not in_gesehen:
                 metriken["FN"][anomalie] += 1  # Falsch-Negativ (Missed Detection)
             elif not in_ist and in_gesehen:
                 metriken["FP"][anomalie] += 1  # Falsch-Positiv (False Alarm)
             else:
-                metriken["RN"][anomalie] += 1  # Real-Negativ (True Negative)
+                metriken["RN"][anomalie] += 1  # Richtig-Negativ (True Negative)
 
     # 5. Abschlussbericht drucken
     drucke_metriken_bericht(metriken, anomalien)
@@ -137,6 +153,7 @@ def main(fehler_rate=0.0):
     return metriken
 
 def sum_nested_dicts(*dicts):
+    """Summiert alle Werte in einem geschachtelten Dict."""
     result = {}
     for d in dicts:
         for outer_key in d:
@@ -149,8 +166,9 @@ def sum_nested_dicts(*dicts):
     return result
 
 if __name__ == "__main__":
-    overall_metriken = {}
-    for i in range(20):
+    overall_metriken = {} # Metriken für die Gesamtzusammenfassung über alle Testdurchläufe hinweg
+    # Anzahl Testdurchläufe festlegen
+    for i in range(500):
         metriken = main(fehler_rate=.54)
         overall_metriken = sum_nested_dicts(overall_metriken, metriken)
 
