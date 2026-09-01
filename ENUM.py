@@ -34,7 +34,8 @@ BASISBILDER = {
 # Zuordnen von möglichen Belegungen, Anomalien und deren Eintrittswahrscheinlichkeit für jedes Fach
 BELEGUNGEN = ["RED", "BLUE", "WHITE", ""]
 ANOMALIEN = ["Farbe", "Verkantung", "Behälter_Rotiert", "Behälter_Fehlt"]
-GEWICHTUNG_ANOMALIEN = [0.6, 0.2, 0.1, 0.1]
+GEWICHTUNG_ANOMALIEN_WERKSTUEK = [0.6, 0.2, 0.1, 0.1]
+GEWICHTUNG_ANOMALIEN_OHNE_WERKSTUEK = [0.6, 0.0, 0.2, 0.2]
 
 IMAGE_PATH = "data/img/current.jpg"
 

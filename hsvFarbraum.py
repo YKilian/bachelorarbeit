@@ -28,12 +28,12 @@ cv2.resizeWindow("HSV Einstellungen", 400, 300)
 # Trackbars für LOWER Vektor
 cv2.createTrackbar("Lower H", "HSV Einstellungen", 0, 180, nothing)
 cv2.createTrackbar("Lower S", "HSV Einstellungen", 0, 255, nothing)
-cv2.createTrackbar("Lower V", "HSV Einstellungen", 30, 255, nothing)
+cv2.createTrackbar("Lower V", "HSV Einstellungen", 65, 255, nothing)
 
 # Trackbars für UPPER Vektor
 cv2.createTrackbar("Upper H", "HSV Einstellungen", 180, 180, nothing)
-cv2.createTrackbar("Upper S", "HSV Einstellungen", 50, 255, nothing)
-cv2.createTrackbar("Upper V", "HSV Einstellungen", 150, 255, nothing)
+cv2.createTrackbar("Upper S", "HSV Einstellungen", 95, 255, nothing)
+cv2.createTrackbar("Upper V", "HSV Einstellungen", 146, 255, nothing)
 
 print("=" * 60)
 print(" HSV SCHIEBEREGLER - TOOL")

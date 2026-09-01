@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-
 import ENUM
 
 # =========================================================
@@ -92,8 +91,9 @@ def analyze_container_presence_and_orientation(roi, debug_canvas=None, global_of
     # Wir zählen spaltenweise (vertikal), wie viele schwarze Pixel im Bodenbereich liegen.
     column_pixel_counts = np.sum(bottom_mask > 0, axis=0)
 
-    # Eine Spalte gilt als "Aussparung/Lücke", wenn weniger als 30% ihrer Höhe schwarz sind
-    empty_columns = np.sum(column_pixel_counts < (bottom_zone_h * 0.3))
+    # Eine Spalte gilt als "Aussparung/Lücke", wenn weniger als 75% ihrer Höhe schwarz sind
+    print(f"bottom_zone_h * 0.75 = {bottom_zone_h * 0.75} \n column_pixel_counts = {column_pixel_counts}")
+    empty_columns = np.sum(column_pixel_counts < (bottom_zone_h * 0.75))
 
     # Relativer Anteil der Lücke bezogen auf die Gesamtbreite des Behälters
     gap_ratio = empty_columns / float(bw)

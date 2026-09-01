@@ -1,4 +1,5 @@
 import random
+from unittest import case
 
 import cv2
 import numpy as np
@@ -19,6 +20,9 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
 
     # Basishintergrund (Regal mit leeren Containern) laden
     original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "empty_container.jpg"))
+
+    # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
+    gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN
 
     if original_hintergrund is None:
         print("Fehler: 'empty_container.jpg' nicht gefunden!")
@@ -52,6 +56,8 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
         soll_farbe = fach['workpiece']['type']  # Werkstückfarbe
 
         if generiere_fehler and fehlerhaftes_fach == idx:
+            # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
+            gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN_WERKSTUEK if soll_farbe != "" else ENUM.GEWICHTUNG_ANOMALIEN_OHNE_WERKSTUEK
             erzeugte_anomalie = str(np.random.choice(ENUM.ANOMALIEN, p=gewichtung_anomalien))
             neuer_zustand = ""
             match erzeugte_anomalie:
