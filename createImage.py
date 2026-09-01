@@ -21,15 +21,9 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
     # Basishintergrund (Regal mit leeren Containern) laden
     original_hintergrund = cv2.imread(os.path.join(datenbank_pfad, "empty_container.jpg"))
 
-    # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
-    gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN
-
     if original_hintergrund is None:
         print("Fehler: 'empty_container.jpg' nicht gefunden!")
         return None
-
-    # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
-    gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN
 
     # Ziel-Dimensionen berechnen und Hintergrund skalieren
     original_breite = int(original_hintergrund.shape[1] * scale_factor)
@@ -59,7 +53,7 @@ def generiere_sps_state(sps_daten, generiere_fehler=False):
             # Für generierung von Fehlbildern, Mapping mit Gewichtung der Eintrittswahrscheinlichkeit des jeweiligen Fehlers
             gewichtung_anomalien = ENUM.GEWICHTUNG_ANOMALIEN_WERKSTUEK if soll_farbe != "" else ENUM.GEWICHTUNG_ANOMALIEN_OHNE_WERKSTUEK
             erzeugte_anomalie = str(np.random.choice(ENUM.ANOMALIEN, p=gewichtung_anomalien))
-            neuer_zustand = ""
+            neuer_zustand = [] # ["FARBE", "ANOMALIE"]
             match erzeugte_anomalie:
                 case "Farbe":
                     kopie_basisbilder = ENUM.BASISBILDER[reihe].copy()
